@@ -146,4 +146,4 @@ async def say(ctx, *, msg):
     await ctx.send(msg)
 
             
-client.run('SEU TOKEN')
+client.run('NzM3MTMzMDA0NzU3MTM5NTQw.Xx46mw.Aqaf-lGErGMXTA_FOnNCURK9RbI')
