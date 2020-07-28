@@ -1,1 +1,1 @@
-suporte: python "suporte.py"
+worker: python main.py
