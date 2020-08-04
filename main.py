@@ -1,11 +1,25 @@
 import discord
 from discord import Client
 from discord.ext import commands
+from discord.ext.commands import cooldown, BucketType,CommandOnCooldown, BadArgument, CommandNotFound
 import asyncio
 from discord.utils import get
+import random
 from random import randint
+import json
+import os
+
 
 client = commands.Bot(command_prefix='.')
+IGNORE_EXCEPTIONS = (CommandNotFound, BadArgument)
+
+
+@client.event
+async def on_command_error(ctx, exc):
+    if any([isinstance(exc, error) for error in IGNORE_EXCEPTIONS]):
+        pass
+    elif isinstance(exc, CommandOnCooldown):
+        await ctx.send(f"Este comando está com cooldown. Tente novamente em {exc.retry_after:,.2f} segundos.")
 
 
 @client.event
@@ -234,10 +248,145 @@ async def piada(ctx):
     else:
         await ctx.send(f'Você não pode executar esse comando aqui, {ctx.author.mention}. Vá até o canal de comandos.')
 
+@client.command()
+async def conta(ctx):
+    user = ctx.author
+    await open_account(ctx.author)
+    users = await get_bank_data()
+
+    walletAmount = users[str(user.id)]["carteira"]
+    bankAmount = users[str(user.id)]["banco"]
+
+    em = discord.Embed(title=f"Conta bancária do {ctx.author.name} ", color= discord.Color.green())
+    em.add_field(name= "Carteira", value=walletAmount)
+    em.add_field(name="Banco", value=bankAmount)
+    await ctx.send(embed=em)
+
+@client.command()
+@cooldown(1,10, BucketType.user)
+async def mendigar(ctx):
+    user = ctx.author
+    await open_account(ctx.author)
+    users = await get_bank_data()
+    earnings = random.randrange(101)
+    await ctx.send(f"Alguém te deu {earnings} reais, {ctx.author.mention}!")
+    users[str(user.id)]["carteira"] += earnings
+    with open("mainbank.json", "w") as f:
+        json.dump(users,f)
+
+@client.command()
+async def sacar(ctx,amount = None):
+    await open_account(ctx.author)
+
+    if amount == None:
+        await ctx.send("Digite a quantia a ser sacada.")
+        return
+
+    bal = await update_bank(ctx.author)
+    amount = int(amount)
+    if amount > bal[1]:
+        await ctx.send("Você não tem dinheiro suficiente.")
+        return
+    if amount < 0:
+        await ctx.send("A quantia deve ser maior que 0.")
+        return
+
+    await update_bank(ctx.author,amount)
+    await update_bank(ctx.author,-1*amount,"banco")
+
+    await ctx.send(f"Você sacou {amount} reais!")
+
+@client.command()
+async def depositar(ctx,amount = None):
+    await open_account(ctx.author)
+
+    if amount == None:
+        await ctx.send("Digite a quantia a ser sacada.")
+        return
+
+    bal = await update_bank(ctx.author)
+    amount = int(amount)
+    if amount > bal[0]:
+        await ctx.send("Você não tem dinheiro suficiente.")
+        return
+    if amount < 0:
+        await ctx.send("A quantia deve ser maior que 0.")
+        return
+
+    await update_bank(ctx.author,-1*amount)
+    await update_bank(ctx.author,amount,"banco")
+
+    await ctx.send(f"Você depositou {amount} reais!")
+
+@client.command()
+async def enviar(ctx,member:discord.Member,amount = None):
+    await open_account(ctx.author)
+    await open_account(member)
+
+    if amount == None:
+        await ctx.send("Digite a quantia a ser sacada.")
+        return
+
+    bal = await update_bank(ctx.author)
+    amount = int(amount)
+    if amount > bal[1]:
+        await ctx.send("Você não tem dinheiro suficiente.")
+        return
+    if amount < 0:
+        await ctx.send("A quantia deve ser maior que 0.")
+        return
+
+    await update_bank(ctx.author,-1*amount,"banco")
+    await update_bank(member,amount,"banco")
+
+    await ctx.send(f"Você enviou {amount} reais!")
+
+@client.command()
+async def roubar(ctx,member:discord.Member,amount = None):
+    await open_account(ctx.author)
+    await open_account(member)
+
+    bal = await update_bank(member)
+    if bal[0]<100:
+        await ctx.send("Esse roubo não vale a pena!")
+        return
+    earnings = random.randrange(0, bal[0])
+
+    await update_bank(ctx.author,earnings)
+    await update_bank(member,-1*earnings)
+
+    await ctx.send(f"Você roubou {member} e conseguiu {earnings} reais!")
+
+async def open_account(user):
+    users = await get_bank_data()
+    if str(user.id) in users:
+        return False
+    else:
+        users[str(user.id)] = {}
+        users[str(user.id)]["carteira"] = 0
+        users[str(user.id)]["banco"] = 0
+    with open("mainbank.json", "w") as f:
+        json.dump(users,f)
+    return True
+
+async def get_bank_data():
+    with open("mainbank.json", "r") as f:
+        users = json.load(f)
+    return users
+
+async def update_bank(user, change = 0,mode = "carteira"):
+    users = await get_bank_data()
+    users[str(user.id)][mode] += change
+    with open("mainbank.json", "w") as f:
+        json.dump(users, f)
+    bal = [users[str(user.id)]["carteira"],users[str(user.id)]["banco"]]
+    return bal
+
 @client.event
 async def on_member_join(ctx):
     role = discord.utils.get(ctx.guild.roles, name = "🔅 ▸ Membro")
     await ctx.add_roles(role)
 
 
-client.run('TOKEN DO SEU BOT')
+
+client.run('SEU TOKEN AQUI')
